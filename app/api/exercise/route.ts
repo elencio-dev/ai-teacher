@@ -24,28 +24,32 @@ EXPLANATION: [brief explanation in Portuguese explaining why this is correct]
 
 Make the question relevant to ${userProfile.goal} context.`;
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an English teacher creating exercises. Follow the format exactly as specified.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.8,
-        max_tokens: 600,
-      }),
-    });
+    const response = await fetch(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are an English teacher creating exercises. Follow the format exactly as specified.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.8,
+          max_tokens: 600,
+        }),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.text();
@@ -56,13 +60,27 @@ Make the question relevant to ${userProfile.goal} context.`;
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    const content: string = data.choices[0].message.content;
 
-    // Parse the response
-    const questionMatch = content.match(/QUESTION:\s*(.+?)(?=\n[A-D]\))/s);
-    const optionsMatch = content.match(/([A-D]\))\s*(.+?)(?=\n[A-D]\)|CORRECT:|$)/gs);
-    const correctMatch = content.match(/CORRECT:\s*([A-D])/);
-    const explanationMatch = content.match(/EXPLANATION:\s*(.+?)$/s);
+    // ======================
+    // Robust parsing (ES2017 safe)
+    // ======================
+
+    const questionMatch = content.match(
+      /QUESTION:\s*([\s\S]+?)(?=\n[A-D]\))/
+    );
+
+    const optionsMatch = content.match(
+      /([A-D]\))\s*([\s\S]+?)(?=\n[A-D]\)|\nCORRECT:|$)/g
+    );
+
+    const correctMatch = content.match(
+      /CORRECT:\s*([A-D])/
+    );
+
+    const explanationMatch = content.match(
+      /EXPLANATION:\s*([\s\S]+)$/
+    );
 
     if (!questionMatch || !optionsMatch || !correctMatch) {
       return NextResponse.json(
@@ -73,13 +91,16 @@ Make the question relevant to ${userProfile.goal} context.`;
 
     const exercise = {
       question: questionMatch[1].trim(),
-      options: optionsMatch.map(opt => opt.trim().replace(/^[A-D]\)\s*/, '')),
-      correctAnswer: correctMatch[1].charCodeAt(0) - 65, // Convert A-D to 0-3
-      explanation: explanationMatch ? explanationMatch[1].trim() : ''
+      options: optionsMatch.map(opt =>
+        opt.replace(/^[A-D]\)\s*/, '').trim()
+      ),
+      correctAnswer: correctMatch[1].charCodeAt(0) - 65,
+      explanation: explanationMatch
+        ? explanationMatch[1].trim()
+        : '',
     };
 
     return NextResponse.json({ exercise });
-
   } catch (error) {
     console.error('Exercise API error:', error);
     return NextResponse.json(
